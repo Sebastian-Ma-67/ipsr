@@ -50,7 +50,7 @@ void ipsr(const string &input_name, const string &output_name, int iters, double
 	XForm<REAL, DIM + 1> iXForm;
 	vector<double> weight_samples;
 	// sample points by the octree
-	points_normals = sample_points<REAL, DIM>((int)argv_str.size(), argv_str.data(), points_normals, iXForm, &weight_samples);
+	points_normals = sample_points<REAL, DIM>((int)argv_str.size(), argv_str.data(), points_normals, iXForm, &weight_samples); // 通过octree，得到 n 个点。
 
 	// initialize normals randomly
 	printf("random initialization...\n");
@@ -60,9 +60,9 @@ void ipsr(const string &input_name, const string &output_name, int iters, double
 	{
 		do
 		{
-			points_normals[i].second = Point<REAL, DIM>(rand() % 1001 - 500.0, rand() % 1001 - 500.0, rand() % 1001 - 500.0);
+			points_normals[i].second = Point<REAL, DIM>(rand() % 1001 - 500.0, rand() % 1001 - 500.0, rand() % 1001 - 500.0); // 随机生成一个法向量，大概是[234,178,762]形式
 		} while (points_normals[i].second == zero_normal);
-		normalize<REAL, DIM>(points_normals[i].second);
+		normalize<REAL, DIM>(points_normals[i].second); // 然后将其模正则到 1。
 	}
 
 	// construct the Kd-Tree
@@ -73,9 +73,9 @@ void ipsr(const string &input_name, const string &output_name, int iters, double
 		for (size_t i = 0; i < points_normals.size(); ++i)
 		{
 			array<double, 3> p{points_normals[i].first[0], points_normals[i].first[1], points_normals[i].first[2]};
-			vertices.push_back(kdt::KDTreePoint(p));
+			vertices.push_back(kdt::KDTreePoint(p)); // 将octree 采样得到的点放置到 vertices 中。
 		}
-		tree.build(vertices);
+		tree.build(vertices); // 利用 vertices 来构建 octree。
 	}
 
 	pair<vector<Point<REAL, DIM>>, vector<vector<int>>> mesh;
@@ -93,8 +93,8 @@ void ipsr(const string &input_name, const string &output_name, int iters, double
 		// Poisson reconstruction
 		mesh = poisson_reconstruction<REAL, DIM>((int)argv_str.size(), argv_str.data(), points_normals, &weight_samples);
 
-		vector<vector<int>> nearestSamples(mesh.second.size());
-		vector<Point<REAL, DIM>> normals(mesh.second.size());
+		vector<vector<int>> nearestSamples(mesh.second.size()); // 用于存放每个面的 K 个近邻 sample 点。
+		vector<Point<REAL, DIM>> normals(mesh.second.size()); // 用于存放每个面的法向量。
 
 		// compute face normals and map them to sample points
 #pragma omp parallel for
@@ -102,21 +102,21 @@ void ipsr(const string &input_name, const string &output_name, int iters, double
 		{
 			if (mesh.second[i].size() == 3)
 			{
-				Point<REAL, DIM> c = mesh.first[mesh.second[i][0]] + mesh.first[mesh.second[i][1]] + mesh.first[mesh.second[i][2]];
-				c /= 3;
+				Point<REAL, DIM> c = mesh.first[mesh.second[i][0]] + mesh.first[mesh.second[i][1]] + mesh.first[mesh.second[i][2]]; // 得到面片三个顶点的和
+				c /= 3; // 然后除以 3，得到面片的中心点坐标
 				array<REAL, DIM> a{c[0], c[1], c[2]};
 				nearestSamples[i] = tree.knnSearch(kdt::KDTreePoint(a), k_neighbors);
-				normals[i] = Point<REAL, DIM>::CrossProduct(mesh.first[mesh.second[i][1]] - mesh.first[mesh.second[i][0]], mesh.first[mesh.second[i][2]] - mesh.first[mesh.second[i][0]]);
+				normals[i] = Point<REAL, DIM>::CrossProduct(mesh.first[mesh.second[i][1]] - mesh.first[mesh.second[i][0]], mesh.first[mesh.second[i][2]] - mesh.first[mesh.second[i][0]]); // 计算面的法向量（这里的法向量因为没有归一化，因此其实相当云面积加权之后的法向量）
 			}
 		}
 
 		// update sample point normals
-		vector<Normal<REAL, DIM>> projective_normals(points_normals.size(), zero_normal);
+		vector<Normal<REAL, DIM>> projective_normals(points_normals.size(), zero_normal); // 用[0,0,0]来初始化每一个 sample 点的映射向量。
 		for (size_t i = 0; i < nearestSamples.size(); i++)
 		{
 			for (size_t j = 0; j < nearestSamples[i].size(); ++j)
 			{
-				projective_normals[nearestSamples[i][j]].normal[0] += normals[i][0];
+				projective_normals[nearestSamples[i][j]].normal[0] += normals[i][0]; // 将每一个面的法向量贡献给与它产生联系的 sample 点。下同。
 				projective_normals[nearestSamples[i][j]].normal[1] += normals[i][1];
 				projective_normals[nearestSamples[i][j]].normal[2] += normals[i][2];
 			}
@@ -124,25 +124,25 @@ void ipsr(const string &input_name, const string &output_name, int iters, double
 
 #pragma omp parallel for
 		for (int i = 0; i < (int)projective_normals.size(); ++i)
-			normalize<REAL, DIM>(projective_normals[i]);
+			normalize<REAL, DIM>(projective_normals[i]); // 将这些 sample 点的映射向量的模正则为 1。
 
 		// compute the average normal variation of the top 1/1000 points
 		size_t heap_size = static_cast<size_t>(ceil(points_normals.size() / 1000.0));
 		priority_queue<double, vector<double>, greater<double>> min_heap;
 		for (size_t i = 0; i < points_normals.size(); ++i)
 		{
-			if (!(projective_normals[i] == zero_normal))
+			if (!(projective_normals[i] == zero_normal)) // 如果 sample 的 normal 不为0，那我们计算它的 normal 与之前状态的变化量。
 			{
 				double diff = Point<REAL, DIM>::SquareNorm((projective_normals[i] - points_normals[i].second).normal);
 				if (min_heap.size() < heap_size)
 					min_heap.push(diff);
-				else if (diff > min_heap.top())
+				else if (diff > min_heap.top()) // 找到 1/1000 * sample.size 个法向量变化最大的值。
 				{
 					min_heap.pop();
 					min_heap.push(diff);
 				}
 
-				points_normals[i].second = projective_normals[i];
+				points_normals[i].second = projective_normals[i]; // 用 sample 的映射 normal 向量来更新自身的 normal。
 			}
 		}
 

@@ -1,0 +1,35 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            // Resolved by CMake Tools:
+            "program": "${workspaceFolder}/build/IPSR",
+            "args": ["--in",
+                    "${workspaceFolder}/data/bunny_sparse.ply", 
+                    "--out",
+                    "${workspaceFolder}/out/bunny_sparse.ply",
+                    "--iters",
+                    "5",
+                    "--pointWeight",
+                    "10",
+                    "--depth",
+                    "10",
+                    "--neighbors",
+                    "10"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+    ]
+}
